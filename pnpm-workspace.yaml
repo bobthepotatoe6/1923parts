@@ -1,0 +1,3 @@
+# Fake workspace file to stop shadcn from traversing upwards
+packages:
+  - '.'
