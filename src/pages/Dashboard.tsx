@@ -228,7 +228,12 @@ export default function Dashboard() {
       cell: ({ row }) => {
         const p = row.original;
         const allocated = p.allocatedQuantity || 0;
-        const available = p.quantity - allocated;
+        
+        const shelfQuantity = p.quantityUnbinned ?? p.quantity;
+        const binQuantity = p.quantityInBins ?? 0;
+        const totalQuantity = p.quantityTotal ?? (p.quantity + binQuantity);
+        
+        const available = totalQuantity - allocated;
         const isLowStock = p.minimumStockThreshold !== undefined && available <= p.minimumStockThreshold;
         return (
           <div className="flex flex-col items-center justify-center gap-1">
@@ -236,16 +241,25 @@ export default function Dashboard() {
               <Button
                 variant="outline" size="icon"
                 className="h-8 w-8 rounded-full hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors disabled:opacity-40"
-                disabled={p.quantity <= 0}
-                onClick={(e) => handleAdjustQuantity(p._id, -1, p.quantity, e)}
+                disabled={shelfQuantity <= 0}
+                onClick={(e) => handleAdjustQuantity(p._id, -1, shelfQuantity, e)}
               >
                 <Minus className="h-3 w-3" />
               </Button>
-              <span className="w-8 text-center font-bold text-lg">{available}</span>
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="w-10 text-center font-bold tabular-nums">
+                  {totalQuantity}
+                </span>
+                {binQuantity > 0 && (
+                  <span className="text-[10px] leading-none text-muted-foreground tabular-nums">
+                    {shelfQuantity} shelf · {binQuantity} bin{binQuantity === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
               <Button
                 variant="outline" size="icon"
                 className="h-8 w-8 rounded-full hover:bg-green-600 hover:text-white hover:border-green-600 transition-colors"
-                onClick={(e) => handleAdjustQuantity(p._id, 1, p.quantity, e)}
+                onClick={(e) => handleAdjustQuantity(p._id, 1, shelfQuantity, e)}
               >
                 <Plus className="h-3 w-3" />
               </Button>

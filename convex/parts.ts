@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  applyUnbinnedQuantityChange,
+  sumInBinsForPart,
+} from "./partInventory";
 
 export const getParts = query({
   args: {
@@ -34,11 +38,27 @@ export const getParts = query({
       );
     }
 
+    const binItems = await ctx.db.query("bin_items").collect();
+    const inBinsByPart = new Map<string, number>();
+    for (const row of binItems) {
+      const key = row.partId;
+      inBinsByPart.set(key, (inBinsByPart.get(key) ?? 0) + row.quantity);
+    }
+
     return await Promise.all(
-      result.map(async (p) => ({
-        ...p,
-        stepFileUrl: p.stepFileId ? await ctx.storage.getUrl(p.stepFileId) : null,
-      }))
+      result.map(async (p) => {
+        const quantityInBins = inBinsByPart.get(p._id) ?? 0;
+        const quantityUnbinned = p.quantity;
+        return {
+          ...p,
+          quantityUnbinned,
+          quantityInBins,
+          quantityTotal: quantityUnbinned + quantityInBins,
+          stepFileUrl: p.stepFileId
+            ? await ctx.storage.getUrl(p.stepFileId)
+            : null,
+        };
+      })
     );
   },
 });
@@ -64,7 +84,19 @@ export const getPart = query({
       stepFileUrl = await ctx.storage.getUrl(part.stepFileId);
     }
 
-    return { ...part, history, fileUrl, stepFileUrl };
+    const quantityInBins = await sumInBinsForPart(ctx, args.id);
+    const quantityUnbinned = part.quantity;
+    const quantityTotal = quantityUnbinned + quantityInBins;
+
+    return {
+      ...part,
+      quantityUnbinned,
+      quantityInBins,
+      quantityTotal,
+      history,
+      fileUrl,
+      stepFileUrl,
+    };
   },
 });
 
@@ -131,20 +163,12 @@ export const updateQuantity = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const part = await ctx.db.get(args.id);
-    if (!part) throw new Error("Part not found");
-
-    const newQuantity = part.quantity + args.change;
-    await ctx.db.patch(args.id, { quantity: newQuantity });
-
-    await ctx.db.insert("inventory_history", {
-      partId: args.id,
-      change: args.change,
-      timestamp: Date.now(),
-      reason: args.reason || "Manual update",
-    });
-
-    return newQuantity;
+    return await applyUnbinnedQuantityChange(
+      ctx,
+      args.id,
+      args.change,
+      args.reason || "Manual update"
+    );
   },
 });
 
@@ -153,6 +177,13 @@ export const deletePart = mutation({
   handler: async (ctx, args) => {
     const part = await ctx.db.get(args.id);
     if (!part) return null;
+    const binRows = await ctx.db
+      .query("bin_items")
+      .withIndex("by_part", (q) => q.eq("partId", args.id))
+      .collect();
+    for (const row of binRows) {
+      await ctx.db.delete(row._id);
+    }
     const history = await ctx.db
       .query("inventory_history")
       .withIndex("by_part", (q) => q.eq("partId", args.id))

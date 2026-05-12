@@ -75,51 +75,80 @@ export function AddPartModal() {
     e.preventDefault();
     if (!name.trim()) return toast.error("Name is required");
     if (!vendor.trim()) return toast.error("Vendor is required");
+    if (quantity < 1) return toast.error("Quantity must be at least 1");
+    if (!convex) {
+      toast.error("Convex client is not ready. Check your connection and VITE_CONVEX_URL.");
+      return;
+    }
 
     setLoading(true);
     try {
-      const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
-      let stepFileId: any = undefined;
+      const tags = tagsInput.split(",").map((t) => t.trim()).filter(Boolean);
+      let stepFileId: string | undefined = undefined;
 
-      // Deduplication check
-      const existingStepFileId = await convex.query(api.parts.checkExistingStepFile, {
-        vendor,
-        productCode: productCode.trim() || undefined,
-      });
+      const existingStepFileId = await convex.query(
+        api.parts.checkExistingStepFile,
+        {
+          vendor: vendor.trim(),
+          productCode: productCode.trim() || undefined,
+        }
+      );
 
       if (existingStepFileId) {
-        stepFileId = existingStepFileId;
+        stepFileId = existingStepFileId as string;
         if (stepFile) {
-          toast.info("Reusing existing .step file for this vendor/SKU to save storage.");
+          toast.info(
+            "Reusing existing .step file for this vendor/SKU to save storage."
+          );
         }
       } else if (stepFile) {
         const postUrl = await generateUploadUrl();
         const result = await fetch(postUrl, {
           method: "POST",
-          headers: { "Content-Type": stepFile.type },
+          headers: {
+            "Content-Type":
+              stepFile.type || "application/octet-stream",
+          },
           body: stepFile,
         });
-        const { storageId } = await result.json();
+        const raw = await result.text();
+        if (!result.ok) {
+          throw new Error(
+            `Upload failed (${result.status}): ${raw.slice(0, 200)}`
+          );
+        }
+        let body: { storageId?: string } = {};
+        try {
+          body = raw ? JSON.parse(raw) : {};
+        } catch {
+          throw new Error("Upload response was not valid JSON.");
+        }
+        const storageId = body.storageId;
+        if (!storageId || typeof storageId !== "string") {
+          throw new Error("Upload succeeded but response had no storageId.");
+        }
         stepFileId = storageId;
       }
 
-      await addPart({ 
-        name, 
-        category, 
-        quantity, 
+      await addPart({
+        name: name.trim(),
+        category,
+        quantity,
         description: description.trim() || undefined,
-        vendor,
+        vendor: vendor.trim(),
         productCode: productCode.trim() || undefined,
         tags,
         stepFileId,
         minimumStockThreshold: minimumStockThreshold === "" ? undefined : minimumStockThreshold
       });
-      
+
       toast.success("Part added successfully");
       setAddPartModalOpen(false);
       resetForm();
     } catch (error) {
-      toast.error("Failed to add part");
+      const message =
+        error instanceof Error ? error.message : "Failed to add part";
+      toast.error(message);
       console.error(error);
     } finally {
       setLoading(false);
@@ -189,7 +218,10 @@ export function AddPartModal() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Vendor *</label>
-              <Select value={vendor} onValueChange={(v) => setVendor(v || "")}>
+              <Select
+                value={vendor || undefined}
+                onValueChange={(v) => setVendor(v ?? "")}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Vendor" />
                 </SelectTrigger>
@@ -215,7 +247,10 @@ export function AddPartModal() {
             
             <div className="space-y-2">
               <label className="text-sm font-medium">Category</label>
-              <Select value={category} onValueChange={(v) => setCategory(v || "Mechanical")}>
+              <Select
+                value={category || undefined}
+                onValueChange={(v) => setCategory(v ?? "Mechanical")}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select..." />
                 </SelectTrigger>

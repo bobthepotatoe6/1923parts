@@ -4,8 +4,10 @@ import { ThemeProvider } from "next-themes";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthGate } from "@/components/auth/AuthGate";
+import { AppShell } from "@/components/AppShell";
 import Dashboard from "@/pages/Dashboard";
 import Ledger from "@/pages/Ledger";
+import Binning from "@/pages/Binning";
 import { PartDetailModal } from "@/components/PartDetailModal";
 import { AddPartModal } from "@/components/AddPartModal";
 import { AllocatePartModal } from "@/components/AllocatePartModal";
@@ -31,10 +33,13 @@ export default function App() {
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <AuthGate>
           <BrowserRouter>
-            <main className="min-h-screen bg-background text-foreground font-sans antialiased">
+            <main className="min-h-screen bg-background font-sans text-foreground antialiased">
               <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/ledger" element={<Ledger />} />
+                <Route element={<AppShell />}>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/ledger" element={<Ledger />} />
+                  <Route path="/binning" element={<Binning />} />
+                </Route>
               </Routes>
 
               <PartDetailModal />
