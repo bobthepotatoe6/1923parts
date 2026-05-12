@@ -31,4 +31,17 @@ export default defineSchema({
     partId: v.id("parts"),
     rowIndex: v.number(),
   }).index("by_uniqueIdentifier", ["uniqueIdentifier"]),
+
+  bins: defineTable({
+    name: v.string(),
+    color: v.string(),
+  }),
+
+  bin_items: defineTable({
+    binId: v.id("bins"),
+    partId: v.id("parts"),
+    quantity: v.number(),
+  })
+    .index("by_bin", ["binId"])
+    .index("by_bin_and_part", ["binId", "partId"]),
 });
