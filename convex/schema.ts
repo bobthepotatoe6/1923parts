@@ -8,7 +8,13 @@ export default defineSchema({
     category: v.string(), // "Mechanical", "Electrical", etc.
     description: v.optional(v.string()),
     fileId: v.optional(v.id("_storage")), // G-code file reference
-  }).searchIndex("search_name", { searchField: "name" }),
+    vendor: v.string(),
+    productCode: v.optional(v.string()),
+    stepFileId: v.optional(v.id("_storage")),
+    tags: v.array(v.string()),
+  })
+    .searchIndex("search_name", { searchField: "name" })
+    .index("by_vendor_and_productCode", ["vendor", "productCode"]),
 
   inventory_history: defineTable({
     partId: v.id("parts"),

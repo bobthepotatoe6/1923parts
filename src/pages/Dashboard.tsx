@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useUiStore } from "@/store/uiStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, PackageOpen, Minus, Settings2 } from "lucide-react";
+import { Search, Plus, PackageOpen, Minus, Settings2, Tag, DownloadCloud, Trash2, Box } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -13,24 +13,56 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { PartPreview } from "@/components/PartPreview";
 
 export default function Dashboard() {
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<string | undefined>(undefined);
+  
+  const categoryFilter = useUiStore((state) => state.categoryFilter);
+  const setCategoryFilter = useUiStore((state) => state.setCategoryFilter);
+  const tagFilters = useUiStore((state) => state.tagFilters);
+  const setTagFilters = useUiStore((state) => state.setTagFilters);
   
   const parts = useQuery(api.parts.getParts, { 
     search: search || undefined, 
-    category 
+    category: categoryFilter,
+    tags: tagFilters.length > 0 ? tagFilters : undefined
   });
-  const updateQuantity = useMutation(api.parts.updateQuantity);
   
+  const updateQuantity = useMutation(api.parts.updateQuantity);
+  const deletePart = useMutation(api.parts.deletePart);
+
   const setSelectedPartId = useUiStore((state) => state.setSelectedPartId);
   const setDetailModalOpen = useUiStore((state) => state.setDetailModalOpen);
   const setAddPartModalOpen = useUiStore((state) => state.setAddPartModalOpen);
+  const set3DViewerOpen = useUiStore((state) => state.set3DViewerOpen);
+  const setSelectedStepPartId = useUiStore((state) => state.setSelectedStepPartId);
 
-  const handleAdjustQuantity = async (id: any, change: number, e: React.MouseEvent) => {
+  const open3DViewer = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setSelectedStepPartId(id);
+    set3DViewerOpen(true);
+  };
+
+  const handleAdjustQuantity = async (
+    id: any,
+    change: number,
+    currentQuantity: number,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    if (change < 0 && currentQuantity <= 0) return;
     try {
       await updateQuantity({ id, change });
       toast.success(change > 0 ? "Quantity increased" : "Quantity decreased");
@@ -39,10 +71,42 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeletePart = async (id: any, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${name}"? This removes the part and its history.`)) {
+      return;
+    }
+    try {
+      await deletePart({ id });
+      toast.success("Part deleted");
+    } catch (err: any) {
+      toast.error("Failed to delete part");
+    }
+  };
+
   const openPartDetail = (id: string) => {
     setSelectedPartId(id);
     setDetailModalOpen(true);
   };
+
+  const toggleTagFilter = (tag: string) => {
+    if (tagFilters.includes(tag)) {
+      setTagFilters(tagFilters.filter(t => t !== tag));
+    } else {
+      setTagFilters([...tagFilters, tag]);
+    }
+  };
+
+  // Get all unique tags from currently fetched parts (or could do globally if we fetched all)
+  // To avoid filtering out tags when we apply a tag filter, we should ideally fetch all tags, 
+  // but for simplicity we extract from the visible parts or all if we can.
+  // Actually, since getParts only returns filtered parts, this unique tags list will shrink.
+  // That's acceptable for this scope.
+  const availableTags = useMemo(() => {
+    if (!parts) return [];
+    const allTags = parts.flatMap(p => p.tags || []);
+    return Array.from(new Set(allTags)).sort();
+  }, [parts]);
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-8 space-y-6">
@@ -68,36 +132,74 @@ export default function Dashboard() {
           />
         </div>
         
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="h-12 px-4 shadow-sm">
-              <Settings2 className="mr-2 h-5 w-5 text-muted-foreground" />
-              {category || "All Categories"}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[200px]">
-            <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setCategory(undefined)}>
-              All Categories
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setCategory("Mechanical")}>
-              Mechanical
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setCategory("Electrical")}>
-              Electrical
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setCategory("Hardware")}>
-              Hardware
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex gap-2">
+          {/* Tag Filter Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-12 px-4 shadow-sm">
+                <Tag className="mr-2 h-5 w-5 text-muted-foreground" />
+                {tagFilters.length > 0 ? `${tagFilters.length} Tags` : "Filter by Tag"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              <DropdownMenuLabel>Filter by Tag</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {tagFilters.length > 0 && (
+                <>
+                  <DropdownMenuItem onClick={() => setTagFilters([])}>
+                    Clear all tags
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              {availableTags.length === 0 ? (
+                <div className="p-2 text-sm text-muted-foreground">No tags found</div>
+              ) : (
+                availableTags.map(tag => (
+                  <DropdownMenuCheckboxItem 
+                    key={tag}
+                    checked={tagFilters.includes(tag)}
+                    onCheckedChange={() => toggleTagFilter(tag)}
+                  >
+                    {tag}
+                  </DropdownMenuCheckboxItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Category Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-12 px-4 shadow-sm">
+                <Settings2 className="mr-2 h-5 w-5 text-muted-foreground" />
+                {categoryFilter || "All Categories"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setCategoryFilter(undefined)}>
+                All Categories
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCategoryFilter("Mechanical")}>
+                Mechanical
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCategoryFilter("Electrical")}>
+                Electrical
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCategoryFilter("Hardware")}>
+                Hardware
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {parts === undefined ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
-          {[1,2,3,4,5,6].map((n) => (
-            <div key={n} className="h-[140px] rounded-xl bg-muted/50 border"></div>
+        <div className="space-y-4 animate-pulse mt-8">
+          {[1,2,3,4,5].map((n) => (
+            <div key={n} className="h-16 rounded-xl bg-muted/50 border"></div>
           ))}
         </div>
       ) : parts.length === 0 ? (
@@ -112,50 +214,132 @@ export default function Dashboard() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {parts.map((part: any) => (
-            <div 
-              key={part._id} 
-              onClick={() => openPartDetail(part._id)}
-              className="group relative rounded-xl border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-accent/50 cursor-pointer flex flex-col"
-            >
-              <div className="mb-4">
-                <span className="inline-block px-2.5 py-1 rounded-full bg-secondary text-xs font-medium text-secondary-foreground mb-3">
-                  {part.category}
-                </span>
-                <h3 className="font-semibold text-lg leading-tight line-clamp-2">{part.name}</h3>
-                {part.description && (
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{part.description}</p>
-                )}
-              </div>
-              
-              <div className="mt-auto flex items-center justify-between pt-4 border-t border-border/50">
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">In Stock</span>
-                  <span className="text-2xl font-bold text-foreground">{part.quantity}</span>
-                </div>
-                
-                <div className="flex items-center gap-2" onClick={(e: any) => e.stopPropagation()}>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-full hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
-                    onClick={(e: any) => handleAdjustQuantity(part._id, -1, e)}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="h-10 w-10 rounded-full hover:bg-green-600 hover:text-white hover:border-green-600 transition-colors"
-                    onClick={(e: any) => handleAdjustQuantity(part._id, 1, e)}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="rounded-md border bg-card shadow-sm overflow-hidden mt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[80px]">Image</TableHead>
+                <TableHead>Part Name & Desc</TableHead>
+                <TableHead>Vendor & SKU</TableHead>
+                <TableHead>Tags</TableHead>
+                <TableHead className="text-center w-[150px]">Quantity</TableHead>
+                <TableHead className="text-right w-[120px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {parts.map((part: any) => (
+                <TableRow
+                  key={part._id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => openPartDetail(part._id)}
+                >
+                  <TableCell className="py-2">
+                    <PartPreview
+                      partId={part._id}
+                      stepFileUrl={part.stepFileUrl ?? null}
+                      onClick={part.stepFileId ? () => {
+                        setSelectedStepPartId(part._id);
+                        set3DViewerOpen(true);
+                      } : undefined}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">{part.name}</div>
+                    {part.description && (
+                      <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                        {part.description}
+                      </div>
+                    )}
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{part.vendor || "Unknown"}</span>
+                      {part.productCode && (
+                        <span className="text-xs text-muted-foreground">{part.productCode}</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      {part.tags && part.tags.length > 0 ? (
+                        part.tags.map((tag: string) => (
+                          <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {tag}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">None</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex items-center justify-center gap-3" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors disabled:opacity-40"
+                        disabled={part.quantity <= 0}
+                        onClick={(e) => handleAdjustQuantity(part._id, -1, part.quantity, e)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-8 text-center font-bold">{part.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full hover:bg-green-600 hover:text-white hover:border-green-600 transition-colors"
+                        onClick={(e) => handleAdjustQuantity(part._id, 1, part.quantity, e)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      {part.stepFileId && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          onClick={(e) => open3DViewer(part._id, e)}
+                          title="View in 3D"
+                        >
+                          <Box className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {(part.stepFileId || part.fileId) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPartDetail(part._id);
+                          }}
+                          title="View File"
+                        >
+                          <DownloadCloud className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(e) => handleDeletePart(part._id, part.name, e)}
+                        title="Delete Part"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

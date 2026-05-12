@@ -5,6 +5,7 @@ export const getParts = query({
   args: {
     search: v.optional(v.string()),
     category: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     let partsQuery;
@@ -21,11 +22,24 @@ export const getParts = query({
 
     const parts = await partsQuery.collect();
 
+    let result = parts;
+
     if (args.category) {
-      return parts.filter((p) => p.category === args.category);
+      result = result.filter((p) => p.category === args.category);
     }
 
-    return parts;
+    if (args.tags && args.tags.length > 0) {
+      result = result.filter((p) =>
+        args.tags!.every(tag => p.tags.includes(tag))
+      );
+    }
+
+    return await Promise.all(
+      result.map(async (p) => ({
+        ...p,
+        stepFileUrl: p.stepFileId ? await ctx.storage.getUrl(p.stepFileId) : null,
+      }))
+    );
   },
 });
 
@@ -45,7 +59,12 @@ export const getPart = query({
       fileUrl = await ctx.storage.getUrl(part.fileId);
     }
 
-    return { ...part, history, fileUrl };
+    let stepFileUrl = null;
+    if (part.stepFileId) {
+      stepFileUrl = await ctx.storage.getUrl(part.stepFileId);
+    }
+
+    return { ...part, history, fileUrl, stepFileUrl };
   },
 });
 
@@ -55,8 +74,44 @@ export const addPart = mutation({
     quantity: v.number(),
     category: v.string(),
     description: v.optional(v.string()),
+    vendor: v.string(),
+    productCode: v.optional(v.string()),
+    stepFileId: v.optional(v.id("_storage")),
+    tags: v.array(v.string()),
   },
   handler: async (ctx, args) => {
+    const existing = args.productCode
+      ? await ctx.db
+          .query("parts")
+          .withIndex("by_vendor_and_productCode", (q) =>
+            q.eq("vendor", args.vendor).eq("productCode", args.productCode!)
+          )
+          .first()
+      : null;
+
+    if (existing) {
+      const patch: Record<string, unknown> = {
+        quantity: existing.quantity + args.quantity,
+      };
+      if (!existing.stepFileId && args.stepFileId) {
+        patch.stepFileId = args.stepFileId;
+      }
+      if (args.tags.length > 0) {
+        const merged = Array.from(new Set([...existing.tags, ...args.tags]));
+        if (merged.length !== existing.tags.length) {
+          patch.tags = merged;
+        }
+      }
+      await ctx.db.patch(existing._id, patch);
+      await ctx.db.insert("inventory_history", {
+        partId: existing._id,
+        change: args.quantity,
+        timestamp: Date.now(),
+        reason: "Restock via Add Part",
+      });
+      return existing._id;
+    }
+
     const id = await ctx.db.insert("parts", { ...args });
     await ctx.db.insert("inventory_history", {
       partId: id,
@@ -92,6 +147,23 @@ export const updateQuantity = mutation({
   },
 });
 
+export const deletePart = mutation({
+  args: { id: v.id("parts") },
+  handler: async (ctx, args) => {
+    const part = await ctx.db.get(args.id);
+    if (!part) return null;
+    const history = await ctx.db
+      .query("inventory_history")
+      .withIndex("by_part", (q) => q.eq("partId", args.id))
+      .collect();
+    for (const record of history) {
+      await ctx.db.delete(record._id);
+    }
+    await ctx.db.delete(args.id);
+    return null;
+  },
+});
+
 export const attachFile = mutation({
   args: {
     id: v.id("parts"),
@@ -102,9 +174,70 @@ export const attachFile = mutation({
   },
 });
 
+export const attachStepFile = mutation({
+  args: {
+    id: v.id("parts"),
+    stepFileId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { stepFileId: args.stepFileId });
+  },
+});
+
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const getStepFileUrl = query({
+  args: { id: v.id("parts") },
+  handler: async (ctx, args) => {
+    const part = await ctx.db.get(args.id);
+    if (!part || !part.stepFileId) return null;
+    const url = await ctx.storage.getUrl(part.stepFileId);
+    if (!url) return null;
+    return { name: part.name, vendor: part.vendor, productCode: part.productCode ?? null, url };
+  },
+});
+
+export const findBySku = query({
+  args: {
+    vendor: v.string(),
+    productCode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!args.vendor || !args.productCode) return null;
+    const match = await ctx.db
+      .query("parts")
+      .withIndex("by_vendor_and_productCode", (q) =>
+        q.eq("vendor", args.vendor).eq("productCode", args.productCode)
+      )
+      .first();
+    if (!match) return null;
+    return {
+      _id: match._id,
+      name: match.name,
+      stepFileId: match.stepFileId ?? null,
+    };
+  },
+});
+
+export const checkExistingStepFile = query({
+  args: {
+    vendor: v.string(),
+    productCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!args.vendor || !args.productCode) return null;
+    const match = await ctx.db
+      .query("parts")
+      .withIndex("by_vendor_and_productCode", (q) =>
+        q.eq("vendor", args.vendor).eq("productCode", args.productCode)
+      )
+      .filter((q) => q.neq(q.field("stepFileId"), undefined))
+      .first();
+    return match?.stepFileId ?? null;
   },
 });

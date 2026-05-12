@@ -15,6 +15,18 @@ interface UiState {
   
   isAddPartModalOpen: boolean;
   setAddPartModalOpen: (open: boolean) => void;
+
+  is3DViewerOpen: boolean;
+  set3DViewerOpen: (open: boolean) => void;
+
+  selectedStepPartId: string | null;
+  setSelectedStepPartId: (id: string | null) => void;
+  // Filter state
+  categoryFilter: string | undefined;
+  setCategoryFilter: (category: string | undefined) => void;
+
+  tagFilters: string[];
+  setTagFilters: (tags: string[]) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -37,4 +49,16 @@ export const useUiStore = create<UiState>((set) => ({
 
   isAddPartModalOpen: false,
   setAddPartModalOpen: (open) => set({ isAddPartModalOpen: open }),
+
+  is3DViewerOpen: false,
+  set3DViewerOpen: (open) => set({ is3DViewerOpen: open }),
+
+  selectedStepPartId: null,
+  setSelectedStepPartId: (id) => set({ selectedStepPartId: id }),
+
+  categoryFilter: undefined,
+  setCategoryFilter: (category) => set({ categoryFilter: category }),
+
+  tagFilters: [],
+  setTagFilters: (tags) => set({ tagFilters: tags }),
 }));

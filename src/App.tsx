@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router";
 import { ThemeProvider } from "next-themes";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
@@ -6,8 +7,21 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import Dashboard from "@/pages/Dashboard";
 import { PartDetailModal } from "@/components/PartDetailModal";
 import { AddPartModal } from "@/components/AddPartModal";
+import { useUiStore } from "@/store/uiStore";
+
+const Step3DViewerModal = lazy(() => import("@/components/Step3DViewerModal"));
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL || "https://fake-url-for-build.convex.cloud");
+
+function LazyViewer() {
+  const isOpen = useUiStore((s) => s.is3DViewerOpen);
+  if (!isOpen) return null;
+  return (
+    <Suspense fallback={null}>
+      <Step3DViewerModal />
+    </Suspense>
+  );
+}
 
 export default function App() {
   return (
@@ -19,9 +33,10 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
               </Routes>
-              
+
               <PartDetailModal />
               <AddPartModal />
+              <LazyViewer />
             </main>
             <Toaster position="top-center" richColors />
           </BrowserRouter>

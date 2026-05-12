@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { FileUp, FileText, Activity, Clock } from "lucide-react";
+import { FileUp, FileText, Activity, Clock, Box } from "lucide-react";
 
 export function PartDetailModal() {
   const isDetailModalOpen = useUiStore((state) => state.isDetailModalOpen);
@@ -21,15 +21,21 @@ export function PartDetailModal() {
   const selectedPartId = useUiStore((state) => state.selectedPartId);
   
   const [uploading, setUploading] = useState(false);
+  const [uploadingStep, setUploadingStep] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const stepFileInputRef = useRef<HTMLInputElement>(null);
+
+  const set3DViewerOpen = useUiStore((state) => state.set3DViewerOpen);
+  const setSelectedStepPartId = useUiStore((state) => state.setSelectedStepPartId);
 
   const part = useQuery(
-    api.parts.getPart, 
+    api.parts.getPart,
     selectedPartId ? { id: selectedPartId as any } : "skip"
   );
-  
+
   const generateUploadUrl = useMutation(api.parts.generateUploadUrl);
   const attachFile = useMutation(api.parts.attachFile);
+  const attachStepFile = useMutation(api.parts.attachStepFile);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,7 +50,7 @@ export function PartDetailModal() {
         body: file,
       });
       const { storageId } = await result.json();
-      
+
       await attachFile({ id: selectedPartId as any, fileId: storageId });
       toast.success("File uploaded successfully");
     } catch (error) {
@@ -52,6 +58,41 @@ export function PartDetailModal() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleStepFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPartId) return;
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".step") && !lower.endsWith(".stp")) {
+      toast.error("Please choose a .step or .stp file");
+      return;
+    }
+
+    setUploadingStep(true);
+    try {
+      const postUrl = await generateUploadUrl();
+      const result = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      const { storageId } = await result.json();
+      await attachStepFile({ id: selectedPartId as any, stepFileId: storageId });
+      toast.success("STEP file attached");
+    } catch (error) {
+      toast.error("Failed to upload STEP file");
+    } finally {
+      setUploadingStep(false);
+      if (stepFileInputRef.current) stepFileInputRef.current.value = "";
+    }
+  };
+
+  const openIn3D = () => {
+    if (!selectedPartId) return;
+    setSelectedStepPartId(selectedPartId);
+    set3DViewerOpen(true);
+    setDetailModalOpen(false);
   };
 
   if (!selectedPartId) return null;
@@ -108,12 +149,64 @@ export function PartDetailModal() {
                   </div>
                 )}
                 
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
                   onChange={handleFileUpload}
                   accept=".gcode,.txt,.nc"
+                />
+              </div>
+
+              {/* STEP File Section */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Box className="h-4 w-4 text-muted-foreground" />
+                  3D Model (.STEP)
+                </h4>
+
+                {part.stepFileUrl ? (
+                  <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-3 truncate">
+                      <div className="p-2 bg-accent/10 rounded-md">
+                        <Box className="h-5 w-5 text-accent" />
+                      </div>
+                      <div className="truncate">
+                        <p className="text-sm font-medium">STEP file attached</p>
+                        <button
+                          onClick={openIn3D}
+                          className="text-xs text-blue-500 hover:underline truncate block text-left"
+                        >
+                          Open 3D viewer
+                        </button>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => stepFileInputRef.current?.click()}
+                      disabled={uploadingStep}
+                    >
+                      {uploadingStep ? "Uploading..." : "Replace"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => stepFileInputRef.current?.click()}
+                    className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploadingStep ? 'bg-muted opacity-70' : 'hover:border-accent hover:bg-accent/5'}`}
+                  >
+                    <Box className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm font-medium">{uploadingStep ? "Uploading..." : "Upload .STEP file"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Enables the 3D viewer for this part</p>
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  ref={stepFileInputRef}
+                  className="hidden"
+                  onChange={handleStepFileUpload}
+                  accept=".step,.stp"
                 />
               </div>
 
