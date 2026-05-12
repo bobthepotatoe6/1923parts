@@ -329,7 +329,7 @@ export default function Binning() {
                     </Button>
                     <Button
                       variant="outline"
-                      className="h-11 border-destructive/30 text-destructive hover:bg-destructive/10"
+                      className="h-11 border-neutral-800 bg-neutral-900 text-white shadow-sm transition-colors hover:border-destructive hover:bg-destructive hover:text-white dark:border-neutral-700 dark:bg-neutral-950 dark:hover:border-destructive dark:hover:bg-destructive"
                       onClick={handleDeleteBin}
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
