@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useUiStore } from "@/store/uiStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Plus, PackageOpen, Minus, Settings2, Tag, DownloadCloud, Trash2, Box } from "lucide-react";
+import { Search, Plus, PackageOpen, Minus, Settings2, Tag, DownloadCloud, Trash2, Box, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -42,6 +42,22 @@ export default function Dashboard() {
   
   const updateQuantity = useMutation(api.parts.updateQuantity);
   const deletePart = useMutation(api.parts.deletePart);
+  const syncSheets = useAction(api.googleSheets.syncFromSheet);
+
+  const handleSync = () => {
+    toast.promise(syncSheets(), {
+      loading: "Syncing with Google Sheets...",
+      success: (r: {
+        synced: number;
+        skippedDuplicate: number;
+        notFound: number;
+        skippedIncomplete: number;
+      }) =>
+        `Synced ${r.synced} order${r.synced === 1 ? "" : "s"} • ${r.skippedDuplicate} already synced • ${r.notFound} unmatched`,
+      error: (err: { message?: string }) =>
+        `Sync failed: ${err?.message ?? "unknown error"}`,
+    });
+  };
 
   const setSelectedPartId = useUiStore((state) => state.setSelectedPartId);
   const setDetailModalOpen = useUiStore((state) => state.setDetailModalOpen);
@@ -115,10 +131,20 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight mb-1">Inventory Dashboard</h1>
           <p className="text-muted-foreground">Manage and track 1923parts inventory.</p>
         </div>
-        <Button onClick={() => setAddPartModalOpen(true)} className="h-12 px-6 shadow-sm group">
-          <Plus className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" />
-          Add New Part
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            onClick={handleSync}
+            className="h-12 px-6 shadow-sm"
+          >
+            <RefreshCw className="mr-2 h-5 w-5" />
+            Sync with Sheets
+          </Button>
+          <Button onClick={() => setAddPartModalOpen(true)} className="h-12 px-6 shadow-sm group">
+            <Plus className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" />
+            Add New Part
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

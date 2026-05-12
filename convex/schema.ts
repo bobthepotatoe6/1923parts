@@ -14,7 +14,8 @@ export default defineSchema({
     tags: v.array(v.string()),
   })
     .searchIndex("search_name", { searchField: "name" })
-    .index("by_vendor_and_productCode", ["vendor", "productCode"]),
+    .index("by_vendor_and_productCode", ["vendor", "productCode"])
+    .index("by_productCode", ["productCode"]),
 
   inventory_history: defineTable({
     partId: v.id("parts"),
@@ -22,4 +23,12 @@ export default defineSchema({
     timestamp: v.number(),
     reason: v.optional(v.string()),
   }).index("by_part", ["partId"]),
+
+  syncedOrders: defineTable({
+    uniqueIdentifier: v.string(),
+    productCode: v.string(),
+    quantity: v.number(),
+    partId: v.id("parts"),
+    rowIndex: v.number(),
+  }).index("by_uniqueIdentifier", ["uniqueIdentifier"]),
 });

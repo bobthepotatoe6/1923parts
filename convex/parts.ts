@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 export const getParts = query({
   args: {
@@ -239,5 +239,53 @@ export const checkExistingStepFile = query({
       .filter((q) => q.neq(q.field("stepFileId"), undefined))
       .first();
     return match?.stepFileId ?? null;
+  },
+});
+
+export const processSyncedOrder = internalMutation({
+  args: {
+    uniqueIdentifier: v.string(),
+    productCode: v.string(),
+    quantityToAdd: v.number(),
+    rowIndex: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const already = await ctx.db
+      .query("syncedOrders")
+      .withIndex("by_uniqueIdentifier", (q) =>
+        q.eq("uniqueIdentifier", args.uniqueIdentifier)
+      )
+      .first();
+    if (already) return { status: "skipped_duplicate" as const };
+
+    const part = await ctx.db
+      .query("parts")
+      .withIndex("by_productCode", (q) => q.eq("productCode", args.productCode))
+      .first();
+
+    if (!part) {
+      console.warn(
+        `[GoogleSheetsSync] Row ${args.rowIndex}: no part with productCode "${args.productCode}" — skipped, not recorded.`
+      );
+      return { status: "not_found" as const };
+    }
+
+    await ctx.db.patch(part._id, { quantity: part.quantity + args.quantityToAdd });
+    await ctx.db.insert("inventory_history", {
+      partId: part._id,
+      change: args.quantityToAdd,
+      timestamp: Date.now(),
+      reason: `Google Sheets sync (row ${args.rowIndex})`,
+    });
+
+    await ctx.db.insert("syncedOrders", {
+      uniqueIdentifier: args.uniqueIdentifier,
+      productCode: args.productCode,
+      quantity: args.quantityToAdd,
+      partId: part._id,
+      rowIndex: args.rowIndex,
+    });
+
+    return { status: "synced" as const };
   },
 });

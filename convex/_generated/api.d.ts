@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as googleSheets from "../googleSheets.js";
 import type * as parts from "../parts.js";
 
 import type {
@@ -19,6 +20,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  googleSheets: typeof googleSheets;
   parts: typeof parts;
 }>;
 
