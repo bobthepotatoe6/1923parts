@@ -1,9 +1,9 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation } from "./_generated/server";
 
 export const verifyPassword = mutation({
   args: { password: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     const teamPassword = process.env.TEAM_PASSWORD;
     if (!teamPassword) {
       // If no password is set in the environment, we might reject or accept. 

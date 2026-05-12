@@ -78,6 +78,7 @@ export const addPart = mutation({
     productCode: v.optional(v.string()),
     stepFileId: v.optional(v.id("_storage")),
     tags: v.array(v.string()),
+    minimumStockThreshold: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = args.productCode
@@ -287,5 +288,84 @@ export const processSyncedOrder = internalMutation({
     });
 
     return { status: "synced" as const };
+  },
+});
+
+export const updatePart = mutation({
+  args: {
+    id: v.id("parts"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    minimumStockThreshold: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...patch } = args;
+    await ctx.db.patch(id, patch);
+  },
+});
+
+export const bulkUpdateTags = mutation({
+  args: {
+    ids: v.array(v.id("parts")),
+    tags: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    for (const id of args.ids) {
+      const part = await ctx.db.get(id);
+      if (part) {
+        const merged = Array.from(new Set([...part.tags, ...args.tags]));
+        await ctx.db.patch(id, { tags: merged });
+        await ctx.db.insert("inventory_history", {
+          partId: id,
+          change: 0,
+          timestamp: Date.now(),
+          reason: "Bulk appended tags",
+        });
+      }
+    }
+  },
+});
+
+export const bulkDelete = mutation({
+  args: {
+    ids: v.array(v.id("parts")),
+  },
+  handler: async (ctx, args) => {
+    for (const id of args.ids) {
+      const part = await ctx.db.get(id);
+      if (part) {
+        const history = await ctx.db
+          .query("inventory_history")
+          .withIndex("by_part", (q) => q.eq("partId", id))
+          .collect();
+        for (const record of history) {
+          await ctx.db.delete(record._id);
+        }
+        await ctx.db.delete(id);
+      }
+    }
+  },
+});
+
+export const getGlobalHistory = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const history = await ctx.db
+      .query("inventory_history")
+      .order("desc")
+      .take(args.limit ?? 100);
+
+    return await Promise.all(
+      history.map(async (record) => {
+        const part = await ctx.db.get(record.partId);
+        return {
+          ...record,
+          partName: part?.name ?? "Deleted Part",
+          partVendor: part?.vendor ?? "Unknown",
+        };
+      })
+    );
   },
 });

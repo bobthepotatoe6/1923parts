@@ -2,9 +2,17 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  allocations: defineTable({
+    partId: v.id("parts"),
+    quantity: v.number(),
+    purpose: v.string(),
+    allocatedBy: v.string(),
+  }).index("by_part", ["partId"]),
+
   parts: defineTable({
     name: v.string(),
     quantity: v.number(),
+    allocatedQuantity: v.optional(v.number()),
     category: v.string(), // "Mechanical", "Electrical", etc.
     description: v.optional(v.string()),
     fileId: v.optional(v.id("_storage")), // G-code file reference
@@ -12,6 +20,7 @@ export default defineSchema({
     productCode: v.optional(v.string()),
     stepFileId: v.optional(v.id("_storage")),
     tags: v.array(v.string()),
+    minimumStockThreshold: v.optional(v.number()),
   })
     .searchIndex("search_name", { searchField: "name" })
     .index("by_vendor_and_productCode", ["vendor", "productCode"])

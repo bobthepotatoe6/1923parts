@@ -5,8 +5,10 @@ import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthGate } from "@/components/auth/AuthGate";
 import Dashboard from "@/pages/Dashboard";
+import Ledger from "@/pages/Ledger";
 import { PartDetailModal } from "@/components/PartDetailModal";
 import { AddPartModal } from "@/components/AddPartModal";
+import { AllocatePartModal } from "@/components/AllocatePartModal";
 import { useUiStore } from "@/store/uiStore";
 
 const Step3DViewerModal = lazy(() => import("@/components/Step3DViewerModal"));
@@ -32,10 +34,12 @@ export default function App() {
             <main className="min-h-screen bg-background text-foreground font-sans antialiased">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/ledger" element={<Ledger />} />
               </Routes>
 
               <PartDetailModal />
               <AddPartModal />
+              <AllocatePartModal />
               <LazyViewer />
             </main>
             <Toaster position="top-center" richColors />

@@ -37,6 +37,7 @@ export function AddPartModal() {
   const [vendor, setVendor] = useState("");
   const [productCode, setProductCode] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [minimumStockThreshold, setMinimumStockThreshold] = useState<number | "">("");
   
   const [stepFile, setStepFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,6 +67,7 @@ export function AddPartModal() {
     setVendor("");
     setProductCode("");
     setTagsInput("");
+    setMinimumStockThreshold("");
     setStepFile(null);
   };
 
@@ -109,7 +111,8 @@ export function AddPartModal() {
         vendor,
         productCode: productCode.trim() || undefined,
         tags,
-        stepFileId
+        stepFileId,
+        minimumStockThreshold: minimumStockThreshold === "" ? undefined : minimumStockThreshold
       });
       
       toast.success("Part added successfully");
@@ -186,7 +189,7 @@ export function AddPartModal() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Vendor *</label>
-              <Select value={vendor} onValueChange={setVendor}>
+              <Select value={vendor} onValueChange={(v) => setVendor(v || "")}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select Vendor" />
                 </SelectTrigger>
@@ -212,7 +215,7 @@ export function AddPartModal() {
             
             <div className="space-y-2">
               <label className="text-sm font-medium">Category</label>
-              <Select value={category} onValueChange={setCategory}>
+              <Select value={category} onValueChange={(v) => setCategory(v || "Mechanical")}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select..." />
                 </SelectTrigger>
@@ -248,6 +251,17 @@ export function AddPartModal() {
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Min Stock Alert</label>
+              <Input 
+                type="number"
+                min="0"
+                placeholder="Optional threshold"
+                value={minimumStockThreshold}
+                onChange={(e) => setMinimumStockThreshold(e.target.value === "" ? "" : Number(e.target.value))}
+              />
             </div>
 
             <div className="space-y-2 col-span-2">

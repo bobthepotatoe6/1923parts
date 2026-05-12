@@ -13,7 +13,15 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { FileUp, FileText, Activity, Clock, Box } from "lucide-react";
+import { FileUp, FileText, Activity, Clock, Box, Edit, Save, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function PartDetailModal() {
   const isDetailModalOpen = useUiStore((state) => state.isDetailModalOpen);
@@ -32,6 +40,15 @@ export function PartDetailModal() {
     api.parts.getPart,
     selectedPartId ? { id: selectedPartId as any } : "skip"
   );
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editThreshold, setEditThreshold] = useState<number | "">("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editTags, setEditTags] = useState("");
+
+  const updatePart = useMutation(api.parts.updatePart);
 
   const generateUploadUrl = useMutation(api.parts.generateUploadUrl);
   const attachFile = useMutation(api.parts.attachFile);
@@ -97,6 +114,35 @@ export function PartDetailModal() {
 
   if (!selectedPartId) return null;
 
+  const handleEditToggle = () => {
+    if (part) {
+      setEditName(part.name);
+      setEditCategory(part.category);
+      setEditThreshold(part.minimumStockThreshold ?? "");
+      setEditDescription(part.description ?? "");
+      setEditTags(part.tags.join(", "));
+    }
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const tagsArray = editTags.split(",").map(t => t.trim()).filter(Boolean);
+      await updatePart({
+        id: selectedPartId as any,
+        name: editName,
+        category: editCategory,
+        minimumStockThreshold: editThreshold === "" ? undefined : editThreshold,
+        description: editDescription,
+        tags: tagsArray,
+      });
+      toast.success("Part details updated");
+      setIsEditing(false);
+    } catch (e) {
+      toast.error("Failed to update part");
+    }
+  };
+
   return (
     <Dialog open={isDetailModalOpen} onOpenChange={setDetailModalOpen}>
       <DialogContent className="sm:max-w-[500px]">
@@ -105,15 +151,72 @@ export function PartDetailModal() {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                {part.name}
-              </DialogTitle>
-              <DialogDescription>
-                {part.category} • {part.quantity} in stock
-              </DialogDescription>
+              <div className="flex items-start justify-between pr-8">
+                <div>
+                  <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                    {part.name}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {part.category} • {part.quantity} in stock
+                  </DialogDescription>
+                </div>
+                {!isEditing && (
+                  <Button variant="outline" size="sm" onClick={handleEditToggle} className="h-8">
+                    <Edit className="h-4 w-4 mr-2" /> Edit
+                  </Button>
+                )}
+              </div>
             </DialogHeader>
 
             <div className="space-y-6 py-4">
+              {isEditing && (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold">Edit Details</h4>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                        <X className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                      <Button size="sm" onClick={handleSaveEdit}>
+                        <Save className="h-4 w-4 mr-1" /> Save
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-xs font-medium">Name</label>
+                      <Input value={editName} onChange={e => setEditName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Category</label>
+                      <Select value={editCategory} onValueChange={(v) => setEditCategory(v || "")}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Mechanical">Mechanical</SelectItem>
+                          <SelectItem value="Electrical">Electrical</SelectItem>
+                          <SelectItem value="Hardware">Hardware</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Min Stock Threshold</label>
+                      <Input type="number" min="0" value={editThreshold} onChange={e => setEditThreshold(e.target.value === "" ? "" : Number(e.target.value))} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-xs font-medium">Tags (comma separated)</label>
+                      <Input value={editTags} onChange={e => setEditTags(e.target.value)} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-xs font-medium">Description</label>
+                      <Textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={2} className="resize-none" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* File Upload Section */}
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold flex items-center gap-2">

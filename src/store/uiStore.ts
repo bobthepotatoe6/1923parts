@@ -19,6 +19,9 @@ interface UiState {
   is3DViewerOpen: boolean;
   set3DViewerOpen: (open: boolean) => void;
 
+  isAllocateModalOpen: boolean;
+  setAllocateModalOpen: (open: boolean) => void;
+
   selectedStepPartId: string | null;
   setSelectedStepPartId: (id: string | null) => void;
   // Filter state
@@ -52,6 +55,9 @@ export const useUiStore = create<UiState>((set) => ({
 
   is3DViewerOpen: false,
   set3DViewerOpen: (open) => set({ is3DViewerOpen: open }),
+
+  isAllocateModalOpen: false,
+  setAllocateModalOpen: (open) => set({ isAllocateModalOpen: open }),
 
   selectedStepPartId: null,
   setSelectedStepPartId: (id) => set({ selectedStepPartId: id }),

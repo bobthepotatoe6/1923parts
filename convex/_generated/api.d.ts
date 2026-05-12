@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as allocations from "../allocations.js";
 import type * as auth from "../auth.js";
 import type * as googleSheets from "../googleSheets.js";
 import type * as parts from "../parts.js";
@@ -19,6 +20,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  allocations: typeof allocations;
   auth: typeof auth;
   googleSheets: typeof googleSheets;
   parts: typeof parts;
