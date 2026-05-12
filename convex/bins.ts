@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import {
+  applyUnbinnedQuantityChange,
+  sumInBinsForPart,
+} from "./partInventory";
 
 export const listBins = query({
   args: {},
@@ -39,10 +43,21 @@ export const getBinWithItems = query({
         const stepFileUrl = part.stepFileId
           ? await ctx.storage.getUrl(part.stepFileId)
           : null;
+        const quantityInBins = await sumInBinsForPart(ctx, item.partId);
+        const quantityUnbinned = part.quantity;
+        const quantityTotal = quantityUnbinned + quantityInBins;
+        const maxQtyInThisBin = item.quantity + quantityUnbinned;
         return {
           _id: item._id,
           quantity: item.quantity,
-          part: { ...part, stepFileUrl },
+          part: {
+            ...part,
+            stepFileUrl,
+            quantityInBins,
+            quantityUnbinned,
+            quantityTotal,
+            maxQtyInThisBin,
+          },
         };
       })
     );
@@ -81,22 +96,25 @@ export const addToBin = mutation({
     const part = await ctx.db.get(args.partId);
     if (!part) throw new Error("Part not found");
 
+    if (args.quantity > part.quantity) {
+      throw new Error(
+        `Only ${part.quantity} unbinned unit${part.quantity === 1 ? "" : "s"} available to move into bins.`
+      );
+    }
+
+    await applyUnbinnedQuantityChange(
+      ctx,
+      args.partId,
+      -args.quantity,
+      `To bin: ${bin.name}`
+    );
+
     const existing = await ctx.db
       .query("bin_items")
       .withIndex("by_bin_and_part", (q) =>
         q.eq("binId", args.binId).eq("partId", args.partId)
       )
       .first();
-
-    const currentInBin = existing?.quantity ?? 0;
-    const remaining = part.quantity - currentInBin;
-    if (args.quantity > remaining) {
-      throw new Error(
-        remaining <= 0
-          ? `No units left to allocate (${part.quantity} in inventory, all already in this bin).`
-          : `Only ${remaining} unit${remaining === 1 ? "" : "s"} can be added to this bin (inventory: ${part.quantity}).`
-      );
-    }
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -124,14 +142,38 @@ export const updateBinItemQuantity = mutation({
     const part = await ctx.db.get(row.partId);
     if (!part) throw new Error("Part not found");
 
+    const bin = await ctx.db.get(row.binId);
+
     if (args.quantity <= 0) {
+      await applyUnbinnedQuantityChange(
+        ctx,
+        row.partId,
+        row.quantity,
+        bin ? `From bin: ${bin.name} (removed)` : "From bin (removed)"
+      );
       await ctx.db.delete(args.binItemId);
       return;
     }
 
-    if (args.quantity > part.quantity) {
-      throw new Error(
-        `Quantity in bin cannot exceed inventory (${part.quantity}).`
+    const delta = args.quantity - row.quantity;
+    if (delta > 0) {
+      if (delta > part.quantity) {
+        throw new Error(
+          `Only ${part.quantity} unbinned unit${part.quantity === 1 ? "" : "s"} available to add to this bin.`
+        );
+      }
+      await applyUnbinnedQuantityChange(
+        ctx,
+        row.partId,
+        -delta,
+        bin ? `To bin: ${bin.name}` : "To bin"
+      );
+    } else if (delta < 0) {
+      await applyUnbinnedQuantityChange(
+        ctx,
+        row.partId,
+        -delta,
+        bin ? `From bin: ${bin.name}` : "From bin"
       );
     }
 
@@ -142,18 +184,38 @@ export const updateBinItemQuantity = mutation({
 export const removeBinItem = mutation({
   args: { binItemId: v.id("bin_items") },
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.binItemId);
+    if (!row) return null;
+    const bin = await ctx.db.get(row.binId);
+    await applyUnbinnedQuantityChange(
+      ctx,
+      row.partId,
+      row.quantity,
+      bin ? `From bin: ${bin.name} (removed)` : "From bin (removed)"
+    );
     await ctx.db.delete(args.binItemId);
+    return null;
   },
 });
 
 export const deleteBin = mutation({
   args: { binId: v.id("bins") },
   handler: async (ctx, args) => {
+    const bin = await ctx.db.get(args.binId);
+    const label = bin?.name ?? "bin";
+
     const items = await ctx.db
       .query("bin_items")
       .withIndex("by_bin", (q) => q.eq("binId", args.binId))
       .collect();
+
     for (const item of items) {
+      await applyUnbinnedQuantityChange(
+        ctx,
+        item.partId,
+        item.quantity,
+        `From bin: ${label} (bin deleted)`
+      );
       await ctx.db.delete(item._id);
     }
     await ctx.db.delete(args.binId);

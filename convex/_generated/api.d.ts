@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as bins from "../bins.js";
 import type * as googleSheets from "../googleSheets.js";
+import type * as partInventory from "../partInventory.js";
 import type * as parts from "../parts.js";
 
 import type {
@@ -23,6 +24,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bins: typeof bins;
   googleSheets: typeof googleSheets;
+  partInventory: typeof partInventory;
   parts: typeof parts;
 }>;
 

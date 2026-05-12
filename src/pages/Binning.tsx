@@ -109,14 +109,13 @@ export default function Binning() {
     }
   };
 
-  const handleAddToBinRow = async (partId: Id<"parts">, partQty: number) => {
+  const handleAddToBinRow = async (partId: Id<"parts">, unbinnedQty: number) => {
     if (!selectedBinId) return;
     const raw = qtyToAddByPart[partId] ?? 1;
-    const inBin = qtyInSelectedBin.get(partId) ?? 0;
-    const maxAdd = Math.max(0, partQty - inBin);
+    const maxAdd = Math.max(0, unbinnedQty);
     const q = Math.min(Math.max(1, raw), Math.max(1, maxAdd));
     if (maxAdd <= 0) {
-      toast.error("This part is already fully allocated to this bin.");
+      toast.error("No unbinned units left to move into this bin.");
       return;
     }
     try {
@@ -140,7 +139,7 @@ export default function Binning() {
   const adjustQuantityInBin = async (
     binItemId: Id<"bin_items">,
     nextQty: number,
-    inventoryQty: number
+    maxQtyInThisBin: number
   ) => {
     if (nextQty < 1) {
       if (!window.confirm("Remove this part from the bin?")) return;
@@ -152,8 +151,10 @@ export default function Binning() {
       }
       return;
     }
-    if (nextQty > inventoryQty) {
-      toast.error(`Cannot exceed inventory (${inventoryQty}).`);
+    if (nextQty > maxQtyInThisBin) {
+      toast.error(
+        `This row can hold at most ${maxQtyInThisBin} (limited by unbinned shelf stock).`
+      );
       return;
     }
     try {
@@ -188,7 +189,7 @@ export default function Binning() {
         <div>
           <h1 className="mb-1 text-3xl font-bold tracking-tight">Binning</h1>
           <p className="text-muted-foreground">
-            Organize inventory parts into labeled bins for storage and picking.
+            Moving parts into a bin pulls from unbinned shelf stock (the same pool the inventory dashboard adjusts with +/−). Bin moves are written to each part's inventory history.
           </p>
         </div>
       </div>
@@ -380,7 +381,13 @@ export default function Binning() {
                           <TableCell>
                             <div className="font-medium">{row.part.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              Inventory: {row.part.quantity}
+                              Total{" "}
+                              {row.part.quantityTotal ??
+                                row.part.quantity +
+                                  (row.part.quantityInBins ?? 0)}
+                              {" · "}
+                              {row.part.quantityUnbinned ?? row.part.quantity}{" "}
+                              unbinned
                             </div>
                           </TableCell>
                           <TableCell>
@@ -396,7 +403,7 @@ export default function Binning() {
                                   adjustQuantityInBin(
                                     row._id,
                                     row.quantity - 1,
-                                    row.part.quantity
+                                    row.part.maxQtyInThisBin
                                   )
                                 }
                               >
@@ -409,12 +416,14 @@ export default function Binning() {
                                 variant="outline"
                                 size="icon"
                                 className="h-8 w-8 rounded-full"
-                                disabled={row.quantity >= row.part.quantity}
+                                disabled={
+                                  row.quantity >= row.part.maxQtyInThisBin
+                                }
                                 onClick={() =>
                                   adjustQuantityInBin(
                                     row._id,
                                     row.quantity + 1,
-                                    row.part.quantity
+                                    row.part.maxQtyInThisBin
                                   )
                                 }
                               >
@@ -432,7 +441,7 @@ export default function Binning() {
                                 adjustQuantityInBin(
                                   row._id,
                                   0,
-                                  row.part.quantity
+                                  row.part.maxQtyInThisBin
                                 )
                               }
                             >
@@ -496,8 +505,17 @@ export default function Binning() {
                 <ScrollArea className="h-[min(52vh,380px)]">
                   <ul className="divide-y divide-border p-2">
                     {searchResults.map((part) => {
-                      const inBin = qtyInSelectedBin.get(part._id) ?? 0;
-                      const maxAdd = Math.max(0, part.quantity - inBin);
+                      const unbinned =
+                        (part as { quantityUnbinned?: number }).quantityUnbinned ??
+                        part.quantity;
+                      const inBins =
+                        (part as { quantityInBins?: number }).quantityInBins ?? 0;
+                      const total =
+                        (part as { quantityTotal?: number }).quantityTotal ??
+                        unbinned + inBins;
+                      const inThisBin =
+                        qtyInSelectedBin.get(part._id) ?? 0;
+                      const maxAdd = Math.max(0, unbinned);
                       const qty =
                         qtyToAddByPart[part._id] ??
                         (maxAdd > 0 ? Math.min(1, maxAdd) : 1);
@@ -515,9 +533,10 @@ export default function Binning() {
                                   {part.name}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  Inventory {part.quantity}
-                                  {inBin > 0
-                                    ? ` · ${inBin} already in this bin`
+                                  Total {total} · {unbinned} unbinned
+                                  {inBins > 0 ? ` · ${inBins} in bins` : ""}
+                                  {inThisBin > 0
+                                    ? ` · ${inThisBin} in this bin`
                                     : ""}
                                 </div>
                               </div>
@@ -556,7 +575,7 @@ export default function Binning() {
                                 className="h-10 shrink-0 px-4 shadow-sm"
                                 disabled={maxAdd <= 0 || !selectedBinId}
                                 onClick={() =>
-                                  handleAddToBinRow(part._id, part.quantity)
+                                  handleAddToBinRow(part._id, unbinned)
                                 }
                               >
                                 Add to Bin

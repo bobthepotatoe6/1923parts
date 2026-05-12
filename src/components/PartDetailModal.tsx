@@ -109,7 +109,17 @@ export function PartDetailModal() {
                 {part.name}
               </DialogTitle>
               <DialogDescription>
-                {part.category} • {part.quantity} in stock
+                {part.category} •{" "}
+                {part.quantityTotal ??
+                  part.quantity + (part.quantityInBins ?? 0)}{" "}
+                total
+                {(part.quantityInBins ?? 0) > 0 && (
+                  <>
+                    {" "}
+                    ({part.quantityUnbinned ?? part.quantity} unbinned,{" "}
+                    {part.quantityInBins} in bins)
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
 

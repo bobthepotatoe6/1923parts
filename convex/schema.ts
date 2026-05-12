@@ -43,5 +43,6 @@ export default defineSchema({
     quantity: v.number(),
   })
     .index("by_bin", ["binId"])
-    .index("by_bin_and_part", ["binId", "partId"]),
+    .index("by_bin_and_part", ["binId", "partId"])
+    .index("by_part", ["partId"]),
 });

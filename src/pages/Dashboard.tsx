@@ -307,17 +307,43 @@ export default function Dashboard() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-full hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors disabled:opacity-40"
-                        disabled={part.quantity <= 0}
-                        onClick={(e) => handleAdjustQuantity(part._id, -1, part.quantity, e)}
+                        disabled={(part.quantityUnbinned ?? part.quantity) <= 0}
+                        onClick={(e) =>
+                          handleAdjustQuantity(
+                            part._id,
+                            -1,
+                            part.quantityUnbinned ?? part.quantity,
+                            e
+                          )
+                        }
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="w-8 text-center font-bold">{part.quantity}</span>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="w-10 text-center font-bold tabular-nums">
+                          {part.quantityTotal ??
+                            part.quantity + (part.quantityInBins ?? 0)}
+                        </span>
+                        {(part.quantityInBins ?? 0) > 0 && (
+                          <span className="text-[10px] leading-none text-muted-foreground tabular-nums">
+                            {part.quantityUnbinned ?? part.quantity} shelf ·{" "}
+                            {part.quantityInBins} bin
+                            {(part.quantityInBins ?? 0) === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </div>
                       <Button
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-full hover:bg-green-600 hover:text-white hover:border-green-600 transition-colors"
-                        onClick={(e) => handleAdjustQuantity(part._id, 1, part.quantity, e)}
+                        onClick={(e) =>
+                          handleAdjustQuantity(
+                            part._id,
+                            1,
+                            part.quantityUnbinned ?? part.quantity,
+                            e
+                          )
+                        }
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
