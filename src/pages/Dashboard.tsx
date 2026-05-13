@@ -5,8 +5,8 @@ import { useUiStore } from "@/store/uiStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { 
-  Search, Plus, PackageOpen, Minus, Settings2, Tag, 
-  DownloadCloud, Trash2, Box, RefreshCw, History, ArrowUpDown 
+  Search, Plus, PackageOpen, Settings2, Tag, 
+  DownloadCloud, Trash2, Box, RefreshCw, History, ArrowUpDown, Pencil 
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -56,7 +56,6 @@ export default function Dashboard() {
     tags: tagFilters.length > 0 ? tagFilters : undefined
   });
   
-  const updateQuantity = useMutation(api.parts.updateQuantity);
   const deletePart = useMutation(api.parts.deletePart);
   const bulkDelete = useMutation(api.parts.bulkDelete);
   const bulkUpdateTags = useMutation(api.parts.bulkUpdateTags);
@@ -66,6 +65,7 @@ export default function Dashboard() {
   const setDetailModalOpen = useUiStore((state) => state.setDetailModalOpen);
   const setAddPartModalOpen = useUiStore((state) => state.setAddPartModalOpen);
   const setAllocateModalOpen = useUiStore((state) => state.setAllocateModalOpen);
+  const setEditQuantityModalOpen = useUiStore((state) => state.setEditQuantityModalOpen);
   const set3DViewerOpen = useUiStore((state) => state.set3DViewerOpen);
   const setSelectedStepPartId = useUiStore((state) => state.setSelectedStepPartId);
 
@@ -83,17 +83,6 @@ export default function Dashboard() {
     e?.stopPropagation();
     setSelectedStepPartId(id);
     set3DViewerOpen(true);
-  };
-
-  const handleAdjustQuantity = async (id: any, change: number, currentQuantity: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (change < 0 && currentQuantity <= 0) return;
-    try {
-      await updateQuantity({ id, change });
-      toast.success(change > 0 ? "Quantity increased" : "Quantity decreased");
-    } catch (err: any) {
-      toast.error("Failed to update quantity");
-    }
   };
 
   const handleDeletePart = async (id: any, name: string, e: React.MouseEvent) => {
@@ -115,6 +104,11 @@ export default function Dashboard() {
   const openAllocateModal = (id: string) => {
     setSelectedPartId(id);
     setAllocateModalOpen(true);
+  };
+
+  const openEditQuantityModal = (id: string) => {
+    setSelectedPartId(id);
+    setEditQuantityModalOpen(true);
   };
 
   const toggleTagFilter = (tag: string) => {
@@ -227,48 +221,27 @@ export default function Dashboard() {
       ),
       cell: ({ row }) => {
         const p = row.original;
-        const allocated = p.allocatedQuantity || 0;
-        
+        const formalAllocated = p.allocatedQuantity || 0;
         const shelfQuantity = p.quantityUnbinned ?? p.quantity;
         const binQuantity = p.quantityInBins ?? 0;
-        const totalQuantity = p.quantityTotal ?? (p.quantity + binQuantity);
-        
-        const available = totalQuantity - allocated;
+
+        // Available = unbinned shelf stock minus formal allocations
+        const available = shelfQuantity - formalAllocated;
+        // Total allocated = parts in bins + formal allocations
+        const totalAllocated = binQuantity + formalAllocated;
         const isLowStock = p.minimumStockThreshold !== undefined && available <= p.minimumStockThreshold;
         return (
-          <div className="flex flex-col items-center justify-center gap-1">
-            <div className="flex items-center justify-center gap-3" onClick={(e) => e.stopPropagation()}>
-              <Button
-                variant="outline" size="icon"
-                className="h-8 w-8 rounded-full hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors disabled:opacity-40"
-                disabled={shelfQuantity <= 0}
-                onClick={(e) => handleAdjustQuantity(p._id, -1, shelfQuantity, e)}
-              >
-                <Minus className="h-3 w-3" />
-              </Button>
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="w-10 text-center font-bold tabular-nums">
-                  {totalQuantity}
-                </span>
-                {binQuantity > 0 && (
-                  <span className="text-[10px] leading-none text-muted-foreground tabular-nums">
-                    {shelfQuantity} shelf · {binQuantity} bin{binQuantity === 1 ? "" : "s"}
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="outline" size="icon"
-                className="h-8 w-8 rounded-full hover:bg-green-600 hover:text-white hover:border-green-600 transition-colors"
-                onClick={(e) => handleAdjustQuantity(p._id, 1, shelfQuantity, e)}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-            {allocated > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{allocated} Allocated</Badge>
+          <div className="flex flex-col items-center justify-center gap-0.5">
+            <span className="text-center font-bold tabular-nums text-base">
+              {available}
+            </span>
+            {totalAllocated > 0 && (
+              <span className="text-[10px] leading-none text-muted-foreground tabular-nums">
+                {totalAllocated} allocated
+              </span>
             )}
             {isLowStock && (
-              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">Low Stock</Badge>
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 mt-0.5">Low Stock</Badge>
             )}
           </div>
         );
@@ -281,6 +254,9 @@ export default function Dashboard() {
         const p = row.original;
         return (
           <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={(e) => { e.stopPropagation(); openEditQuantityModal(p._id); }} title="Edit Quantity">
+              <Pencil className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={(e) => { e.stopPropagation(); openAllocateModal(p._id); }} title="Allocate Part">
               <PackageOpen className="h-4 w-4" />
             </Button>

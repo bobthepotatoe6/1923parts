@@ -11,6 +11,7 @@ import Binning from "@/pages/Binning";
 import { PartDetailModal } from "@/components/PartDetailModal";
 import { AddPartModal } from "@/components/AddPartModal";
 import { AllocatePartModal } from "@/components/AllocatePartModal";
+import { EditQuantityModal } from "@/components/EditQuantityModal";
 import { useUiStore } from "@/store/uiStore";
 
 const Step3DViewerModal = lazy(() => import("@/components/Step3DViewerModal"));
@@ -45,6 +46,7 @@ export default function App() {
               <PartDetailModal />
               <AddPartModal />
               <AllocatePartModal />
+              <EditQuantityModal />
               <LazyViewer />
             </main>
             <Toaster position="top-center" richColors />

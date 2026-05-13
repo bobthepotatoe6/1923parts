@@ -22,6 +22,9 @@ interface UiState {
   isAllocateModalOpen: boolean;
   setAllocateModalOpen: (open: boolean) => void;
 
+  isEditQuantityModalOpen: boolean;
+  setEditQuantityModalOpen: (open: boolean) => void;
+
   selectedStepPartId: string | null;
   setSelectedStepPartId: (id: string | null) => void;
   // Filter state
@@ -58,6 +61,9 @@ export const useUiStore = create<UiState>((set) => ({
 
   isAllocateModalOpen: false,
   setAllocateModalOpen: (open) => set({ isAllocateModalOpen: open }),
+
+  isEditQuantityModalOpen: false,
+  setEditQuantityModalOpen: (open) => set({ isEditQuantityModalOpen: open }),
 
   selectedStepPartId: null,
   setSelectedStepPartId: (id) => set({ selectedStepPartId: id }),

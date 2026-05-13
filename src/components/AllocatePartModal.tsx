@@ -11,7 +11,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
+
+type AllocationType = "description" | "bin";
 
 export function AllocatePartModal() {
   const isAllocateModalOpen = useUiStore((state) => state.isAllocateModalOpen);
@@ -19,55 +28,86 @@ export function AllocatePartModal() {
   const selectedPartId = useUiStore((state) => state.selectedPartId);
 
   const allocatePart = useMutation(api.allocations.allocatePart);
+  const addToBin = useMutation(api.bins.addToBin);
   const part = useQuery(
     api.parts.getPart,
     selectedPartId ? { id: selectedPartId as any } : "skip"
   );
+  const bins = useQuery(api.bins.listBins);
 
+  const [allocationType, setAllocationType] = useState<AllocationType>("description");
   const [quantity, setQuantity] = useState<number | "">("");
   const [purpose, setPurpose] = useState("");
   const [allocatedBy, setAllocatedBy] = useState("");
+  const [selectedBinId, setSelectedBinId] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!selectedPartId || !part) return null;
 
   const availableQuantity = part.quantity - (part.allocatedQuantity ?? 0);
 
+  const resetForm = () => {
+    setQuantity("");
+    setPurpose("");
+    setAllocatedBy("");
+    setSelectedBinId("");
+    setAllocationType("description");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quantity || quantity <= 0) return toast.error("Quantity must be greater than 0");
     if (quantity > availableQuantity) return toast.error(`Only ${availableQuantity} parts available`);
-    if (!purpose.trim()) return toast.error("Purpose is required");
-    if (!allocatedBy.trim()) return toast.error("Your Name is required");
 
-    setLoading(true);
-    try {
-      await allocatePart({
-        partId: selectedPartId as any,
-        quantity: Number(quantity),
-        purpose: purpose.trim(),
-        allocatedBy: allocatedBy.trim(),
-      });
-      
-      toast.success(`Allocated ${quantity} parts for ${purpose}`);
-      setAllocateModalOpen(false);
-      setQuantity("");
-      setPurpose("");
-      setAllocatedBy("");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to allocate part");
-    } finally {
-      setLoading(false);
+    if (allocationType === "bin") {
+      if (!selectedBinId) return toast.error("Please select a bin");
+
+      setLoading(true);
+      try {
+        await addToBin({
+          binId: selectedBinId as any,
+          partId: selectedPartId as any,
+          quantity: Number(quantity),
+        });
+        const binName = bins?.find((b: any) => b._id === selectedBinId)?.name ?? "bin";
+        toast.success(`Moved ${quantity} to ${binName}`);
+        setAllocateModalOpen(false);
+        resetForm();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to add to bin");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!purpose.trim()) return toast.error("Purpose is required");
+      if (!allocatedBy.trim()) return toast.error("Your Name is required");
+
+      setLoading(true);
+      try {
+        await allocatePart({
+          partId: selectedPartId as any,
+          quantity: Number(quantity),
+          purpose: purpose.trim(),
+          allocatedBy: allocatedBy.trim(),
+        });
+        toast.success(`Allocated ${quantity} parts for ${purpose}`);
+        setAllocateModalOpen(false);
+        resetForm();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to allocate part");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   return (
-    <Dialog open={isAllocateModalOpen} onOpenChange={setAllocateModalOpen}>
+    <Dialog open={isAllocateModalOpen} onOpenChange={(open) => { setAllocateModalOpen(open); if (!open) resetForm(); }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Allocate Part</DialogTitle>
           <DialogDescription>
-            Reserve parts for a specific subsystem or project.
+            Reserve parts for a bin or a specific purpose.
           </DialogDescription>
         </DialogHeader>
         
@@ -77,6 +117,28 @@ export function AllocatePartModal() {
             <span className="text-sm font-bold text-green-600 dark:text-green-500">
               {availableQuantity} Available
             </span>
+          </div>
+
+          {/* Allocation Type Selector */}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={allocationType === "description" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setAllocationType("description")}
+            >
+              To Description
+            </Button>
+            <Button
+              type="button"
+              variant={allocationType === "bin" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setAllocationType("bin")}
+            >
+              To Bin
+            </Button>
           </div>
 
           <form id="allocate-form" onSubmit={handleSubmit} className="space-y-4">
@@ -92,33 +154,66 @@ export function AllocatePartModal() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Purpose</label>
-              <Input
-                placeholder="e.g. Shooter Prototype, Intake v2"
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Your Name</label>
-              <Input
-                placeholder="e.g. John Doe"
-                value={allocatedBy}
-                onChange={(e) => setAllocatedBy(e.target.value)}
-                required
-              />
-            </div>
+
+            {allocationType === "bin" ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Destination Bin</label>
+                <Select value={selectedBinId} onValueChange={(v) => setSelectedBinId(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a bin..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bins && bins.length > 0 ? (
+                      bins.map((bin: any) => (
+                        <SelectItem key={bin._id} value={bin._id}>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: bin.color }}
+                            />
+                            {bin.name}
+                          </span>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__none" disabled>
+                        No bins available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Purpose</label>
+                  <Input
+                    placeholder="e.g. Shooter Prototype, Intake v2"
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Your Name</label>
+                  <Input
+                    placeholder="e.g. John Doe"
+                    value={allocatedBy}
+                    onChange={(e) => setAllocatedBy(e.target.value)}
+                    required
+                  />
+                </div>
+              </>
+            )}
           </form>
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setAllocateModalOpen(false)} disabled={loading}>
+          <Button variant="ghost" onClick={() => { setAllocateModalOpen(false); resetForm(); }} disabled={loading}>
             Cancel
           </Button>
           <Button type="submit" form="allocate-form" disabled={loading || availableQuantity <= 0}>
-            {loading ? "Allocating..." : "Allocate"}
+            {loading ? "Allocating..." : allocationType === "bin" ? "Move to Bin" : "Allocate"}
           </Button>
         </div>
       </DialogContent>
